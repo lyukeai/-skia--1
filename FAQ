@@ -1,0 +1,89 @@
+1.Q：什么是skia
+  A：skia是个2D向量图形处理函数库，包含字型、坐标转换，以及点阵图都有高效能且简洁的表现。不仅用于Google Chrome浏览器，新兴的Android开放手机平台也采用skia作为绘图处理，搭配OpenGL/ES与特定的硬件特征，强化显示的效果
+2.Q：skia目录结构
+  A：https://img-blog.csdn.net/20130814135324421?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQveWlueWh5/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center
+3.Q：Skia引擎在android源代码库当中的位置
+  A：头文件(也可以说是internal API, 因为google没有在NDK里面提供他)位置：android/external/skia/include
+
+     源文件位于: android/external/skia/src
+
+    封装层：android对Skia引擎进行了封装，以便让java代码方便的调用，对skia封装的代码存在于android/framework/base/core/jni以及android/framework/base/core/jni/android/graphics目录下面。主要是对Canvas, Bitmap, Graphics, Picture等等的封装，以及和libui库的结合使用。
+4.Q：skia包含哪些库
+  A：Skia主要包含三个库
+  libcorecg.so：包含/skia/src/core的部分内容，比如其中的Region，Rect是在SurfaceFlinger里面用来计算可视区域的。
+  libsgl.so：包含/skia/src/core|effects|images|ports|utils的部分和全部内容，这个实现了skia大部分的图形效果，以及图形格式的编解码。
+  libskiagl.so：包含/skia/src/gl里面的内容，主要用来调用opengl实现部分效果。
+5.Q：重要类简介
+  A：(1)SkCanvas
+这个类是Skia引擎的一个核心类，他封装了所有对设备进行的画图操作。这个类自身包含了一个设备的引用，以及一个矩阵和裁剪栈。所有的画图操作，都是在经过栈内存放的矩阵变幻之后才进行的（这点和OpenGL类似）。当然，最终显示给用户的图像，还必须经过裁剪堆栈的运算。
+SkCanvas记录着整个设备的绘画状态，而设备上面绘制的对象的状态又是由SkPaint类来记录的，SkPaint类作为参数，传递给不同SkCanvas类的成员函数drawXXXX().(比如:drawPoints, drawLine, drawRect, drawCircle)。SkPaint类里记录着如颜色(color)，字体(typeface)，文字大小(textSize)，文字粗细(strokeWidth)，渐变(gradients, patterns)等。
+SkCanvas类的主要成员函数：
+> 构造函数，给定一个Bitmap或者Device，在给定的这个对象上进行画图，Device可以为空。
+            SkCanvas(const SkBitmap& bitmap);
+            SkCanvas(SkDevice* device = NULL);
+> setViewport, getViewport, 这2个函数只有在支持OpenGL视图时才有效。
+> save, saveLayer, saveLayerAlpha, restore，这4个函数用于保存和恢复显示矩阵，剪切，过滤堆栈，不同函数有不同的附加功能。
+> 移位，缩放，旋转，变形函数。
+            translate(SkiaScalar dx， SkiaScalar dy);
+            scale(SkScalar sx， SkScalar sy);
+            rotate(SkScalar degrees);
+            skew(SkScalar sx， SkScalar sy);
+> 指定具体矩阵，进行相应的变换的函数，以上4个方法都可以通过定义特定的矩阵，再调用此函数实现。
+            cancat(const SkMatrix& matrix);
+> 图像剪辑，把指定的区域显示出来。
+            clipRect(SkRect&...);
+            clipPath(SkPath&...);
+            clipRegion(SkRegion&...);
+ > 在当前画布内画图，有以下多种画图方式：
+            drawARGB(u8 a, u8 r, u8 g, u8 b....) 给定透明度以及红，绿，兰3色，填充整个可绘制区域。
+            drawColor(SkColor color...) 给定颜色color, 填充整个绘制区域。
+            drawPaint(SkPaint& paint) 用指定的画笔填充整个区域。
+            drawPoint(...)/drawPoints(...) 根据各种不同参数绘制不同的点。
+            drawLine(x0, y0, x1, y1, paint) 画线，起点(x0, y0)，终点(x1, y1)， 使用paint作为画笔。
+            drawRect(rect, paint) 画矩形，矩形大小由rect指定，画笔由paint指定。
+            drawRectCoords(left, top, right, bottom, paint)， 给定4个边界画矩阵。
+            drawOval(SkRect& oval, SkPaint& paint) 画椭圆，椭圆大小由oval矩形指定。
+            drawCicle(cx,cy,radius, paint)， 给定圆心坐标和半径画圆。
+            drawArcSkRect& oval...) 画弧线，用法类似于画椭圆。
+            drawRoundRect(rect, rx， ry， paint) 画圆角矩形，x，y方向的弧度用rx，ry指定。
+            drawPath(path, paint) 路径绘制，根据path指定的路径绘制路径。
+            drawBitmap(SkBitmap& bitmap, left, top, paint = NULL) 绘制指定的位图，paint可以为空。
+            drawBitmapRect(bitmap, src, dest, paint=NULL)，绘制给定位图的一部分区域，此区域由src指定，然后把截取的部分位图绘制到dest指定的区域，可能进行缩放。
+            drawBitmapMatrix(bitmap, matrix， paint=NULL)，功效同上，可以通过给定矩阵来进行裁剪和缩放变换。
+            drawSprite(bitmap, left, top, paint=NULL)，绘制位图，不受当前变换矩阵影响。
+            drawText(void* text, byteLength, x,y,paint)，以(x，y)为起始点写文字，文字存储在text指针内，长度有byteLength指定。
+            drawPosText(...) 功能同上，不过每个文字可以单独指定位置。
+            drawPosTextH(...) 功能同上，不过由一个变量指定了当前所有文字的统一Y坐标，即在同一条水平线上以不同的间隔写字。
+            drawTextOnPathHV, drawTextOnPath, drawTextOnPath, 以不同方式在给点定的path上面绘制文字。
+            drawPicture(SkPicture& picture) 在画布上绘制图片，比较高效的绘图函数。
+            drawShape(SkShape*) 在画布上绘制指定形状的图像。
+            drawVertices(...) 绘制点，可以有纹理，颜色，等附加选项。
+
+  (2)SkBitmap
+  (3)SkTypeface
+6.Q：Skia在Android中的地位
+  A：1、规定2D绘制API
+  2、规定图像数据结构
+  3、承担编解码调度和软件渲染职责
+7.Q：Android系统中主要使用Skia的场景
+  A：注：Skia调用关系简图：https://img-blog.csdn.net/20150110012642203?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvanh0MTIzNGFuZDIwMTA=/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center
+  1、界面绘制（lockCanvas——draw——unlockCanvas流程）
+（1）UI控件，未开启硬件加速。由performTravelsals——drawSoftware调入。
+Android显示系统是最复杂的Android最复杂的子系统，没有之一，这里只说明软件绘制时的一个基本过程：
+a、计算布局，看是否需要更新View。
+b、计算所有需要更新的View的区域，计算其最小外包矩形，即dirtyRect
+c、由Surface去Lock一个Canvas，Lock时指定dirtyRect，这里涉及gui的buffer轮换机制，会去获取一块未在显示的Buffer，由于换了buffer，在gui模块会去拷贝上一帧非dirtyRect的部分。
+d、执行根View的draw方法，递归调用所有子View的onDraw方法。由于Canvas对应的是软件绘制的canvas，所有绘制操作经过Canvas——SkiaCanvas——SkCanvas的流程，由skia引擎执行。（AndroidL上在jni（libandroid_runtime）处作了一层SkiaCanvas的封装，4.4及以前是Canvas——SkCanvas）
+e、完成绘制，让Surface去unlockCanvas，将绘制好的Buffer送显。
+（2）SurfaceView，这个是由应用显式实现lockCanvas——draw——unlockCanvas流程。
+  2、图像处理
+这种情况下，开发者自行基于目标Bitmap创建Canvas，调用Canvas的API绘制图像，一般是作图像的缩放、旋转处理，也可以加入渐变特效。（不是 lockCanvas 或 继承 onDraw 方法中传入的Canvas，就别想拿去上屏了）
+  3、图像编解码
+Skia对各种类型的图片作了适配，提供统一的接口，开发者调用BitmapFactory，BitmapFactory进一步调用jni——skia。
+（1）关于图像全解，这部分调用逻辑看上去简单，实际上对于输入输出流的处理还是比较复杂的，涉及Java的流——Skia规定的流——对应解码库的流两重转换。
+（2）关于区域解码，这部分是google为平衡内存——性能——显示速度而设计的方案，一些Android机器上的图库打开照片时有一块一块渐渐清晰的过程，就是区域解码然后局部刷新的结果。
+区域解码分成两步：
+a、创建tileIndex，以便查找某个区域所对应的码流位置。
+b、解码：输入指定区域，按照tileIndex查找对应码流，将对应区域的图片解出来，这个过程一般会调用多次。
+4、番外：webview软件渲染
+由于libchromeview将libskia以静态方法集成进去，便跟系统的skia库没什么关系了。对Android系统而言是统一的webview显示框架。
